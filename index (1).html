@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="AVES Encrypt V1 - browser-based private text encryption and decryption tool.">
+<title>AVES Encrypt V1</title>
+<style>
+:root{
+  --bg:#050608; --panel:#0c1014; --panel2:#10161b;
+  --text:#edf7f5; --muted:#8ea39f; --cyan:#00ffcc;
+  --pink:#ff00cc; --line:rgba(0,255,204,.18);
+}
+*{box-sizing:border-box}
+body{
+  margin:0; min-height:100vh; color:var(--text);
+  font-family:Inter,Segoe UI,Arial,sans-serif;
+  background:
+    radial-gradient(circle at 15% 10%,rgba(0,255,204,.10),transparent 28%),
+    radial-gradient(circle at 85% 90%,rgba(255,0,204,.08),transparent 30%),
+    var(--bg);
+}
+.wrap{width:min(1100px,92%);margin:auto;padding:34px 0 50px}
+header{text-align:center;margin-bottom:28px}
+.logo{
+  width:68px;height:68px;margin:0 auto 12px;border:1px solid var(--cyan);
+  border-radius:18px;display:grid;place-items:center;font-size:38px;font-weight:900;
+  color:var(--cyan);text-shadow:0 0 18px rgba(0,255,204,.7);
+  box-shadow:0 0 30px rgba(0,255,204,.12),inset 0 0 20px rgba(0,255,204,.06);
+}
+h1{margin:0;font-size:clamp(28px,5vw,48px);letter-spacing:2px}
+h1 span{color:var(--cyan)}
+.tag{margin:8px 0 0;color:var(--muted)}
+.card{
+  background:rgba(12,16,20,.88);border:1px solid var(--line);
+  border-radius:20px;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.35);
+  backdrop-filter:blur(12px);
+}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+label{display:block;font-size:13px;color:var(--muted);margin:0 0 8px}
+textarea,input{
+  width:100%;border:1px solid rgba(255,255,255,.10);border-radius:12px;
+  background:#070a0d;color:var(--text);outline:none;padding:14px;
+  font:inherit;transition:.2s;
+}
+textarea{min-height:240px;resize:vertical;line-height:1.5}
+input:focus,textarea:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(0,255,204,.08)}
+.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+button{
+  border:1px solid var(--cyan);background:rgba(0,255,204,.08);color:var(--cyan);
+  padding:11px 16px;border-radius:10px;font-weight:700;cursor:pointer;
+  transition:.18s;
+}
+button:hover{transform:translateY(-1px);background:rgba(0,255,204,.15)}
+button.secondary{border-color:#52615e;color:#cbd7d4;background:transparent}
+button.danger{border-color:#ff4f9a;color:#ff8fbe;background:rgba(255,0,120,.05)}
+.password{margin:18px 0}
+.status{
+  margin-top:18px;min-height:44px;padding:12px 14px;border-radius:10px;
+  background:rgba(255,255,255,.035);color:var(--muted);font-size:14px;
+}
+.status.ok{color:var(--cyan)}
+.status.err{color:#ff8fbe}
+.info{margin-top:18px;color:var(--muted);font-size:13px;line-height:1.6}
+footer{text-align:center;margin-top:24px;color:#66736f;font-size:12px}
+@media(max-width:760px){.grid{grid-template-columns:1fr}.wrap{padding-top:22px}textarea{min-height:190px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="logo">A</div>
+  <h1>AVES <span>Encrypt</span> V1</h1>
+  <p class="tag">Private browser-based text encryption & decryption</p>
+</header>
+
+<div class="card">
+  <div class="password">
+    <label for="password">Encryption password</label>
+    <input id="password" type="password" autocomplete="off" placeholder="Enter a strong password">
+  </div>
+
+  <div class="grid">
+    <section>
+      <label for="plain">Plain text</label>
+      <textarea id="plain" placeholder="Type or paste your private message here..."></textarea>
+      <div class="actions">
+        <button id="encryptBtn">Encrypt →</button>
+        <button class="secondary" id="clearPlain">Clear</button>
+      </div>
+    </section>
+
+    <section>
+      <label for="cipher">Encrypted text</label>
+      <textarea id="cipher" placeholder="Encrypted output will appear here..."></textarea>
+      <div class="actions">
+        <button id="decryptBtn">← Decrypt</button>
+        <button class="secondary" id="copyBtn">Copy</button>
+        <button class="secondary" id="downloadBtn">Save .txt</button>
+        <button class="danger" id="clearCipher">Clear</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="status" class="status">Ready. Your text is processed locally in this browser.</div>
+
+  <div class="info">
+    <strong>Security:</strong> AVES Encrypt V1 uses the browser's Web Crypto API,
+    AES-GCM encryption, a random salt and IV, and PBKDF2 password derivation.
+    No server is required for the encryption operation.
+  </div>
+</div>
+
+<footer>AVES Encrypt V1 • Built by Venuja Sathsara</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+
+function setStatus(message, type=""){
+  $("status").textContent = message;
+  $("status").className = "status " + type;
+}
+
+function bytesToB64(bytes){
+  let s="";
+  const chunk=0x8000;
+  for(let i=0;i<bytes.length;i+=chunk)
+    s += String.fromCharCode(...bytes.subarray(i,i+chunk));
+  return btoa(s);
+}
+
+function b64ToBytes(str){
+  const bin=atob(str);
+  const out=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) out[i]=bin.charCodeAt(i);
+  return out;
+}
+
+async function deriveKey(password, salt){
+  const material=await crypto.subtle.importKey(
+    "raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]
+  );
+  return crypto.subtle.deriveKey(
+    {name:"PBKDF2",salt,iterations:250000,hash:"SHA-256"},
+    material,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]
+  );
+}
+
+async function encryptText(){
+  const text=$("plain").value;
+  const password=$("password").value;
+  if(!text) return setStatus("Enter some text to encrypt.","err");
+  if(password.length < 6) return setStatus("Use a password with at least 6 characters.","err");
+
+  try{
+    setStatus("Encrypting...");
+    const salt=crypto.getRandomValues(new Uint8Array(16));
+    const iv=crypto.getRandomValues(new Uint8Array(12));
+    const key=await deriveKey(password,salt);
+    const data=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,enc.encode(text));
+    const payload={
+      v:1, alg:"AES-256-GCM", kdf:"PBKDF2-SHA256",
+      iter:250000, salt:bytesToB64(salt), iv:bytesToB64(iv),
+      data:bytesToB64(new Uint8Array(data))
+    };
+    $("cipher").value="AVES1."+btoa(JSON.stringify(payload));
+    setStatus("Encryption complete. Keep your password safe.","ok");
+  }catch(e){ setStatus("Encryption failed: "+e.message,"err"); }
+}
+
+async function decryptText(){
+  const cipher=$("cipher").value.trim();
+  const password=$("password").value;
+  if(!cipher) return setStatus("Paste or enter encrypted AVES text.","err");
+  if(!password) return setStatus("Enter the password used for encryption.","err");
+
+  try{
+    setStatus("Decrypting...");
+    if(!cipher.startsWith("AVES1.")) throw new Error("Invalid AVES encrypted format.");
+    const payload=JSON.parse(atob(cipher.slice(6)));
+    const salt=b64ToBytes(payload.salt);
+    const iv=b64ToBytes(payload.iv);
+    const data=b64ToBytes(payload.data);
+    const key=await deriveKey(password,salt);
+    const plain=await crypto.subtle.decrypt({name:"AES-GCM",iv},key,data);
+    $("plain").value=dec.decode(plain);
+    setStatus("Decryption complete.","ok");
+  }catch(e){
+    setStatus("Decryption failed. Check the password and encrypted text.","err");
+  }
+}
+
+$("encryptBtn").onclick=encryptText;
+$("decryptBtn").onclick=decryptText;
+$("clearPlain").onclick=()=>{$("plain").value="";setStatus("Plain text cleared.")};
+$("clearCipher").onclick=()=>{$("cipher").value="";setStatus("Encrypted text cleared.")};
+$("copyBtn").onclick=async()=>{
+  if(!$("cipher").value) return setStatus("Nothing to copy.","err");
+  try{
+    await navigator.clipboard.writeText($("cipher").value);
+    setStatus("Encrypted text copied to clipboard.","ok");
+  }catch(e){setStatus("Copy failed. Select and copy it manually.","err")}
+};
+$("downloadBtn").onclick=()=>{
+  const text=$("cipher").value;
+  if(!text) return setStatus("Nothing to save.","err");
+  const blob=new Blob([text],{type:"text/plain;charset=utf-8"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="aves-encrypted.txt";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  setStatus("Encrypted file saved.","ok");
+};
+</script>
+</body>
+</html>
